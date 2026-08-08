@@ -1,12 +1,17 @@
 package com.ecommerce.user.service.impl;
 
+import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterUserRequest;
+import com.ecommerce.user.dto.response.LoginResponse;
 import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.entity.Role;
 import com.ecommerce.user.entity.User;
 import com.ecommerce.user.entity.UserStatus;
 import com.ecommerce.user.exception.EmailAlreadyExistsException;
+import com.ecommerce.user.exception.InvalidCredentialsException;
+import com.ecommerce.user.exception.UserAccountException;
 import com.ecommerce.user.repository.UserRepository;
+import com.ecommerce.user.service.JwtService;
 import com.ecommerce.user.service.UserService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -19,12 +24,14 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     public UserServiceImpl(
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder, JwtService jwtService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     @Override
@@ -66,5 +73,28 @@ public class UserServiceImpl implements UserService {
         response.setUpdatedAt(user.getUpdatedAt());
 
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public LoginResponse login(LoginRequest request) {
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
+
+        if (!passwordEncoder.matches(
+                request.getPassword(),
+                user.getPasswordHash())) {
+
+            throw new InvalidCredentialsException("Invalid email or password");
+        }
+
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new UserAccountException("User account is not active");
+        }
+
+        String accessToken = jwtService.generateToken(user);
+
+        return new LoginResponse(accessToken, "Bearer");
     }
 }

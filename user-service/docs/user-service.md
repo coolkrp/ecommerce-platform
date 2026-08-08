@@ -28,8 +28,8 @@ At the current stage, the service includes the database foundation and initial u
 | User status               | ✅ Completed   |
 | User repository           | ✅ Completed   |
 | User registration API     | ✅ Completed   |
-| Login                     | ⏳ Planned     |
-| JWT authentication        | ⏳ Planned     |
+| Login                     | ✅ Completed   |
+| JWT authentication        | ✅ Completed   |
 | Refresh token             | ⏳ Planned     |
 | RBAC                      | ⏳ Planned     |
 | Profile management        | ⏳ Planned     |
@@ -233,6 +233,7 @@ Creates a new customer account.
 
 **Success Response**
 ```json
+201 Created
 {
   "id": 1,
   "firstName": "Komal",
@@ -242,6 +243,37 @@ Creates a new customer account.
   "status": "ACTIVE",
   "createdAt": "2026-08-08T13:28:38.198620500Z",
   "updatedAt": "2026-08-08T13:28:38.198620500Z"
+}
+```
+
+## Authentication
+
+### Login
+
+**Endpoint**
+
+`POST /api/v1/auth/login`
+
+**Description**
+
+Authenticates an existing user and returns a JWT access token.
+
+**Request**
+
+```json
+{
+  "email": "user@example.com",
+  "password": "Password@123"
+}
+```
+
+**Response**
+
+```json
+200 OK
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer"
 }
 ```
 

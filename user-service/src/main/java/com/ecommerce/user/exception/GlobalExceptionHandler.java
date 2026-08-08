@@ -18,8 +18,7 @@ public class GlobalExceptionHandler {
                 Instant.now(),
                 HttpStatus.CONFLICT.value(),
                 "EMAIL_ALREADY_EXISTS",
-                exception.getMessage()
-        );
+                exception.getMessage());
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
@@ -30,7 +29,36 @@ public class GlobalExceptionHandler {
             Instant timestamp,
             int status,
             String code,
-            String message
-    ) {
+            String message) {
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCredentials(
+            InvalidCredentialsException exception) {
+
+        ErrorResponse response = new ErrorResponse(
+                Instant.now(),
+                HttpStatus.UNAUTHORIZED.value(),
+                "INVALID_CREDENTIALS",
+                exception.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(response);
+    }
+
+    @ExceptionHandler(UserAccountException.class)
+    public ResponseEntity<ErrorResponse> handleUserAccount(
+            UserAccountException exception) {
+
+        ErrorResponse response = new ErrorResponse(
+                Instant.now(),
+                HttpStatus.FORBIDDEN.value(),
+                "USER_ACCOUNT_INACTIVE",
+                exception.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(response);
     }
 }
