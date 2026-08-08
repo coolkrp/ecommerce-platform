@@ -27,7 +27,7 @@ At the current stage, the service includes the database foundation and initial u
 | User roles                | ✅ Completed   |
 | User status               | ✅ Completed   |
 | User repository           | ✅ Completed   |
-| User registration API     | ⏳ In progress |
+| User registration API     | ✅ Completed   |
 | Login                     | ⏳ Planned     |
 | JWT authentication        | ⏳ Planned     |
 | Refresh token             | ⏳ Planned     |
@@ -207,6 +207,43 @@ Check Email
 ```
 
 Registration is the next feature to be implemented.
+
+## API Endpoints
+
+### Register User
+
+**Endpoint**
+
+`POST /api/v1/users/register`
+
+**Description**
+
+Creates a new customer account.
+
+**Request**
+
+```json
+{
+  "firstName": "Komal",
+  "lastName": "Pawar",
+  "email": "komal@example.com",
+  "password": "Password@123"
+}
+```
+
+**Success Response**
+```json
+{
+  "id": 1,
+  "firstName": "Komal",
+  "lastName": "Pawar",
+  "email": "komal@example.com",
+  "role": "CUSTOMER",
+  "status": "ACTIVE",
+  "createdAt": "2026-08-08T13:28:38.198620500Z",
+  "updatedAt": "2026-08-08T13:28:38.198620500Z"
+}
+```
 
 ## Local Development
 
