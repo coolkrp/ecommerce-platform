@@ -1,6 +1,7 @@
 package com.ecommerce.user.controller;
 
 import com.ecommerce.user.dto.request.RegisterUserRequest;
+import com.ecommerce.user.dto.request.UpdateUserRequest;
 import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.service.UserService;
 import jakarta.validation.Valid;
@@ -57,5 +58,16 @@ public class UserController {
                         id,
                         authenticatedUserId,
                         isAdmin));
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<UserResponse> updateCurrentUser(
+            @Valid @RequestBody UpdateUserRequest request,
+            Authentication authentication) {
+
+        Long userId = Long.valueOf(authentication.getName());
+
+        return ResponseEntity.ok(
+                userService.updateCurrentUser(userId, request));
     }
 }

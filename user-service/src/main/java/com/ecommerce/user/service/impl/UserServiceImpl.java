@@ -2,6 +2,7 @@ package com.ecommerce.user.service.impl;
 
 import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterUserRequest;
+import com.ecommerce.user.dto.request.UpdateUserRequest;
 import com.ecommerce.user.dto.response.LoginResponse;
 import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.entity.Role;
@@ -146,5 +147,22 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         return toResponse(user);
+    }
+
+    @Override
+    @Transactional
+    public UserResponse updateCurrentUser(
+            Long userId,
+            UpdateUserRequest request) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        user.setFirstName(request.firstName());
+        user.setLastName(request.lastName());
+
+        User updatedUser = userRepository.save(user);
+
+        return toResponse(updatedUser);
     }
 }
