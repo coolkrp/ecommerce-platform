@@ -1,0 +1,7 @@
+spring:
+  application: { name: cart-service }
+  data:
+    mongodb: { uri: mongodb://localhost:27017/ecommerce_cart }
+    redis: { host: localhost, port: 6379 }
+  kafka: { bootstrap-servers: localhost:9092 }
+server: { port: 8084 }
