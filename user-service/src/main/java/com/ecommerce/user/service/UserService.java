@@ -9,4 +9,5 @@ public interface UserService {
 
     UserResponse register(RegisterUserRequest request);
     LoginResponse login(LoginRequest request);
+    UserResponse getCurrentUser(Long userId);
 }
