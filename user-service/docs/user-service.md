@@ -18,6 +18,7 @@ At the current stage, the service includes the database foundation and initial u
 
 | Feature                   | Status        |
 | ------------------------- | ------------- |
+| Project scaffolding | ✅ Completed |
 | Spring Boot service setup | ✅ Completed   |
 | Java 17 configuration     | ✅ Completed   |
 | MySQL connection          | ✅ Completed   |
@@ -27,13 +28,21 @@ At the current stage, the service includes the database foundation and initial u
 | User roles                | ✅ Completed   |
 | User status               | ✅ Completed   |
 | User repository           | ✅ Completed   |
-| User registration API     | ✅ Completed   |
-| Login                     | ✅ Completed   |
-| JWT authentication        | ✅ Completed   |
-| Refresh token             | ⏳ Planned     |
-| RBAC                      | ⏳ Planned     |
-| Profile management        | ⏳ Planned     |
-| Password reset            | ⏳ Planned     |
+| User registration         | ✅ Completed   |
+| Input validation          | ✅ Completed |
+| Global exception handling | ✅ Completed |
+| Login                     | ✅ Completed |
+| JWT generation            | ✅ Completed |
+| JWT validation            | ✅ Completed |
+| JWT authentication filter | ✅ Completed |
+| Stateless security        | ✅ Completed |
+| Role-based authorization  | ✅ Completed |
+| Get current user          | ✅ Completed |
+| Get user by ID            | ✅ Completed |
+| Update current user       | ✅ Completed |
+| Change password           | ✅ Completed |
+| API documentation         | 🔄 In progress |
+| Automated tests           | ⏳ Pending |
 
 ## Technology Stack
 
@@ -208,6 +217,65 @@ Check Email
 
 Registration is the next feature to be implemented.
 
+## Authentication Flow
+
+The User Service uses JWT-based stateless authentication.
+
+```text
+Login
+  │
+  ▼
+Validate email/password
+  │
+  ▼
+Generate JWT
+  │
+  ▼
+Client stores token
+  │
+  ▼
+Authorization: Bearer <JWT>
+  │
+  ▼
+JwtAuthenticationFilter
+  │
+  ├── Validate signature
+  ├── Validate expiration
+  └── Extract user ID and role
+  │
+  ▼
+SecurityContext
+  │
+  ▼
+Protected API
+```
+## Security
+
+### Roles
+
+Role-based authorization is implemented using Spring Security method-level authorization.
+
+**Example:**
+
+```java
+@PreAuthorize("hasRole('ADMIN')")
+```
+
+**HTTP Security Responses**
+Situation	Status
+* No authentication	401 Unauthorized 
+* Invalid/expired JWT	401 Unauthorized
+* Authenticated but insufficient permissions	403 Forbidden
+* Valid authenticated request	2xx
+
+### Password Change and JWT
+
+Changing a password updates the stored password hash.
+
+Existing JWT access tokens remain valid until their normal expiration because the current authentication implementation is stateless and does not maintain server-side token sessions or revocation state.
+
+A future token-revocation mechanism can be introduced if immediate invalidation of existing tokens after a password change is required.
+
 ## API Endpoints
 
 ### Register User
@@ -223,6 +291,7 @@ Creates a new customer account.
 **Request**
 
 ```json
+Authentication: Public
 {
   "firstName": "Komal",
   "lastName": "Pawar",
@@ -233,7 +302,7 @@ Creates a new customer account.
 
 **Success Response**
 ```json
-201 Created
+Success: 201 Created
 {
   "id": 1,
   "firstName": "Komal",
@@ -245,8 +314,6 @@ Creates a new customer account.
   "updatedAt": "2026-08-08T13:28:38.198620500Z"
 }
 ```
-
-## Authentication
 
 ### Login
 
@@ -261,6 +328,7 @@ Authenticates an existing user and returns a JWT access token.
 **Request**
 
 ```json
+Authentication: Public
 {
   "email": "user@example.com",
   "password": "Password@123"
@@ -270,12 +338,125 @@ Authenticates an existing user and returns a JWT access token.
 **Response**
 
 ```json
-200 OK
+Success: 200 OK
 {
   "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
   "tokenType": "Bearer"
 }
 ```
+
+### Get Current User
+
+**Endpoint**
+
+`GET /api/v1/users/me`
+
+**Description**
+
+Returns the profile of the authenticated user.
+
+**Response**
+```json
+Authentication: Bearer JWT required
+Success: 200 OK
+{
+  "id": 1,
+  "firstName": "Komal",
+  "lastName": "Pawar",
+  "email": "komal@example.com",
+  "role": "CUSTOMER"
+}
+```
+
+### Get User by Id
+
+**Endpoint**
+
+`GET /api/v1/users/{id}`
+
+**Description**
+
+Returns a user's profile.
+
+**Authorization:**
+
+CUSTOMER can access their own profile.
+ADMIN can access any user's profile.
+
+```
+Authentication: Bearer JWT required
+```
+Responses:
+
+Status Code and description
+* 200	User found
+* 401	Authentication required
+* 403	User does not have permission
+* 404	User not found
+
+### Update Current User
+
+**Endpoint**
+
+`PUT /api/v1/users/me`
+
+**Description**
+
+Updates the authenticated user's profile.
+
+**Request**
+```json
+Authentication: Bearer JWT required
+{
+  "firstName": "Komal",
+  "lastName": "Pawar"
+}
+```
+
+The following fields cannot be modified through this endpoint:
+
+* `id`
+* `email`
+* `password`
+* `role`
+* `status`
+
+Success: 200 OK
+
+Validation: Invalid request data returns 400 Bad Request.
+
+### Change Password
+
+**Endpoint**
+
+`PATCH /api/v1/users/me/password`
+
+Changes the password of the currently authenticated user.
+
+**Authentication:** Bearer JWT required
+
+**Request**
+
+```json
+{
+  "currentPassword": "Password@123",
+  "newPassword": "NewPassword@456"
+}
+```
+
+**Password handling:**
+
+The current password is verified using BCrypt.
+The new password is stored as a BCrypt hash.
+Plain-text passwords are never stored or returned.
+
+| Status | Description                   |
+| ------ | ----------------------------- |
+| 204    | Password changed successfully |
+| 400    | Invalid current password      |
+| 400    | Invalid request/new password  |
+| 401    | Authentication required       |
+| 404    | User not found                |
 
 ## Local Development
 

@@ -1,5 +1,6 @@
 package com.ecommerce.user.service.impl;
 
+import com.ecommerce.user.dto.request.ChangePasswordRequest;
 import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterUserRequest;
 import com.ecommerce.user.dto.request.UpdateUserRequest;
@@ -12,6 +13,7 @@ import com.ecommerce.user.exception.AccessDeniedException;
 import com.ecommerce.user.exception.EmailAlreadyExistsException;
 import com.ecommerce.user.exception.GlobalExceptionHandler.ErrorResponse;
 import com.ecommerce.user.exception.InvalidCredentialsException;
+import com.ecommerce.user.exception.InvalidPasswordException;
 import com.ecommerce.user.exception.UserAccountException;
 import com.ecommerce.user.exception.UserNotFoundException;
 import com.ecommerce.user.repository.UserRepository;
@@ -164,5 +166,28 @@ public class UserServiceImpl implements UserService {
         User updatedUser = userRepository.save(user);
 
         return toResponse(updatedUser);
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(
+            Long userId,
+            ChangePasswordRequest request) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        if (!passwordEncoder.matches(
+                request.currentPassword(),
+                user.getPasswordHash())) {
+
+            throw new InvalidPasswordException(
+                    "Current password is incorrect");
+        }
+
+        user.setPasswordHash(
+                passwordEncoder.encode(request.newPassword()));
+
+        userRepository.save(user);
     }
 }
