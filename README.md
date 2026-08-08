@@ -14,7 +14,7 @@ Backend implementation aligned with the supplied Ecommerce PRD/HLD.
 Kong API Gateway, AWS ELB for deployment, MySQL, MongoDB, Redis, Kafka, Elasticsearch.
 
 ## Local Development
-Prerequisites: JDK 21, Maven 3.9+, Docker Desktop.
+Prerequisites: JDK 17, Maven 3.9+, Docker Desktop.
 
 ```bash
 docker compose up -d
