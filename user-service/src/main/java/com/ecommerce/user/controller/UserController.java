@@ -40,4 +40,22 @@ public class UserController {
         return ResponseEntity.ok(
                 userService.getCurrentUser(userId));
     }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponse> getUserById(
+            @PathVariable Long id,
+            Authentication authentication) {
+
+        Long authenticatedUserId = Long.valueOf(authentication.getName());
+
+        boolean isAdmin = authentication.getAuthorities()
+                .stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+
+        return ResponseEntity.ok(
+                userService.getUserById(
+                        id,
+                        authenticatedUserId,
+                        isAdmin));
+    }
 }

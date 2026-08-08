@@ -10,4 +10,5 @@ public interface UserService {
     UserResponse register(RegisterUserRequest request);
     LoginResponse login(LoginRequest request);
     UserResponse getCurrentUser(Long userId);
+    UserResponse getUserById(Long userId, Long authenticatedUserId, boolean isAdmin);
 }

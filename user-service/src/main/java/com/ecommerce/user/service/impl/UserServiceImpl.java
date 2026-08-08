@@ -7,6 +7,7 @@ import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.entity.Role;
 import com.ecommerce.user.entity.User;
 import com.ecommerce.user.entity.UserStatus;
+import com.ecommerce.user.exception.AccessDeniedException;
 import com.ecommerce.user.exception.EmailAlreadyExistsException;
 import com.ecommerce.user.exception.GlobalExceptionHandler.ErrorResponse;
 import com.ecommerce.user.exception.InvalidCredentialsException;
@@ -127,5 +128,23 @@ public class UserServiceImpl implements UserService {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(response);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserResponse getUserById(
+            Long userId,
+            Long authenticatedUserId,
+            boolean isAdmin) {
+
+        if (!isAdmin && !userId.equals(authenticatedUserId)) {
+            throw new AccessDeniedException(
+                    "You do not have permission to access this user");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        return toResponse(user);
     }
 }
