@@ -3,6 +3,7 @@ package com.ecommerce.user.service;
 import com.ecommerce.user.dto.request.ChangePasswordRequest;
 import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterUserRequest;
+import com.ecommerce.user.dto.request.ResetPasswordRequest;
 import com.ecommerce.user.dto.request.UpdateUserRequest;
 import com.ecommerce.user.dto.response.LoginResponse;
 import com.ecommerce.user.dto.response.UserResponse;
@@ -20,4 +21,8 @@ public interface UserService {
     UserResponse updateCurrentUser(Long userId, UpdateUserRequest request);
 
     void changePassword(Long userId, ChangePasswordRequest request);
+
+    void forgotPassword(String email);
+
+    void resetPassword(ResetPasswordRequest request);
 }

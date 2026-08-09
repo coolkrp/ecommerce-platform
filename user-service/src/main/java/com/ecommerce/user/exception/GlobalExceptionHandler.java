@@ -99,4 +99,19 @@ public class GlobalExceptionHandler {
                                 .status(HttpStatus.BAD_REQUEST)
                                 .body(response);
         }
+
+        @ExceptionHandler(InvalidPasswordResetTokenException.class)
+        public ResponseEntity<ErrorResponse> handleInvalidPasswordResetToken(
+                        InvalidPasswordResetTokenException exception) {
+
+                ErrorResponse response = new ErrorResponse(
+                                Instant.now(),
+                                HttpStatus.BAD_REQUEST.value(),
+                                "INVALID_PASSWORD_RESET_TOKEN",
+                                exception.getMessage());
+
+                return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(response);
+        }
 }

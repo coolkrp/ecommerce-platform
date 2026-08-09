@@ -3,9 +3,11 @@ package com.ecommerce.user.service.impl;
 import com.ecommerce.user.dto.request.ChangePasswordRequest;
 import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterUserRequest;
+import com.ecommerce.user.dto.request.ResetPasswordRequest;
 import com.ecommerce.user.dto.request.UpdateUserRequest;
 import com.ecommerce.user.dto.response.LoginResponse;
 import com.ecommerce.user.dto.response.UserResponse;
+import com.ecommerce.user.entity.PasswordResetToken;
 import com.ecommerce.user.entity.Role;
 import com.ecommerce.user.entity.User;
 import com.ecommerce.user.entity.UserStatus;
@@ -14,9 +16,12 @@ import com.ecommerce.user.exception.EmailAlreadyExistsException;
 import com.ecommerce.user.exception.GlobalExceptionHandler.ErrorResponse;
 import com.ecommerce.user.exception.InvalidCredentialsException;
 import com.ecommerce.user.exception.InvalidPasswordException;
+import com.ecommerce.user.exception.InvalidPasswordResetTokenException;
 import com.ecommerce.user.exception.UserAccountException;
 import com.ecommerce.user.exception.UserNotFoundException;
+import com.ecommerce.user.repository.PasswordResetTokenRepository;
 import com.ecommerce.user.repository.UserRepository;
+import com.ecommerce.user.security.PasswordResetTokenGenerator;
 import com.ecommerce.user.service.JwtService;
 import com.ecommerce.user.service.UserService;
 
@@ -28,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.time.Instant;
+import java.util.Optional;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -35,13 +41,18 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final PasswordResetTokenGenerator passwordResetTokenGenerator;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     public UserServiceImpl(
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder, JwtService jwtService) {
+            PasswordEncoder passwordEncoder, JwtService jwtService,
+            PasswordResetTokenGenerator pwdResetTokenGenerator, PasswordResetTokenRepository pwdResetTokenRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.passwordResetTokenGenerator = pwdResetTokenGenerator;
+        this.passwordResetTokenRepository = pwdResetTokenRepository;
     }
 
     @Override
@@ -189,5 +200,67 @@ public class UserServiceImpl implements UserService {
                 passwordEncoder.encode(request.newPassword()));
 
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void forgotPassword(String email) {
+
+        Optional<User> userOptional = userRepository.findByEmail(email);
+
+        if (userOptional.isEmpty()) {
+            return;
+        }
+
+        User user = userOptional.get();
+
+        passwordResetTokenRepository.deleteByUser(user);
+
+        PasswordResetTokenGenerator.GeneratedResetToken generated = passwordResetTokenGenerator.generate();
+
+        PasswordResetToken resetToken = new PasswordResetToken();
+
+        resetToken.setUser(user);
+        resetToken.setTokenHash(generated.tokenHash());
+        resetToken.setExpiresAt(generated.expiresAt());
+        resetToken.setUsed(false);
+        resetToken.setCreatedAt(Instant.now());
+
+        passwordResetTokenRepository.save(resetToken);
+
+        // Notification event will be added when we implement Kafka.
+        // For now, the raw token is available here for that integration.
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+
+        String tokenHash = passwordResetTokenGenerator.hash(request.token());
+
+        PasswordResetToken resetToken = passwordResetTokenRepository
+                .findByTokenHash(tokenHash)
+                .orElseThrow(() -> new InvalidPasswordResetTokenException(
+                        "Invalid or expired password reset token"));
+
+        if (resetToken.isUsed()) {
+            throw new InvalidPasswordResetTokenException(
+                    "Invalid or expired password reset token");
+        }
+
+        if (resetToken.getExpiresAt().isBefore(Instant.now())) {
+            throw new InvalidPasswordResetTokenException(
+                    "Invalid or expired password reset token");
+        }
+
+        User user = resetToken.getUser();
+
+        user.setPasswordHash(
+                passwordEncoder.encode(request.newPassword()));
+
+        userRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
     }
 }

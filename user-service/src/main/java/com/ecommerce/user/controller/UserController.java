@@ -1,8 +1,10 @@
 package com.ecommerce.user.controller;
 
 import com.ecommerce.user.dto.request.ChangePasswordRequest;
+import com.ecommerce.user.dto.request.ForgotPasswordRequest;
 import com.ecommerce.user.dto.request.RegisterUserRequest;
 import com.ecommerce.user.dto.request.UpdateUserRequest;
+import com.ecommerce.user.dto.response.MessageResponse;
 import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.service.UserService;
 import jakarta.validation.Valid;
@@ -83,4 +85,6 @@ public class UserController {
 
                 return ResponseEntity.noContent().build();
         }
+
+        
 }
