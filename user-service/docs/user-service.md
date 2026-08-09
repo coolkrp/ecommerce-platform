@@ -41,6 +41,10 @@ At the current stage, the service includes the database foundation and initial u
 | Get user by ID            | ✅ Completed |
 | Update current user       | ✅ Completed |
 | Change password           | ✅ Completed |
+| Password reset request    | ✅ Completed |
+| Secure reset token        | ✅ Completed |
+| Reset password            | ✅ Completed |
+| One-time token validation | ✅ Completed |
 | API documentation         | 🔄 In progress |
 | Automated tests           | ⏳ Pending |
 
@@ -163,7 +167,20 @@ INACTIVE
 LOCKED
 ```
 
-## Repository
+### Password Reset Tokens
+
+The `password_reset_tokens` table stores hashed, short-lived password reset tokens.
+
+| Column | Description |
+|---|---|
+| `id` | Primary key |
+| `user_id` | User associated with the reset request |
+| `token_hash` | SHA-256 hash of the reset token |
+| `expires_at` | Token expiration time |
+| `used` | Indicates whether the token has already been consumed |
+| `created_at` | Token creation timestamp |
+
+## UserRepository
 
 `UserRepository` extends Spring Data JPA's `JpaRepository`.
 
@@ -180,6 +197,15 @@ Optional<User> findByEmail(String email);
 `existsByEmail()` will be used during registration to detect duplicate accounts.
 
 `findByEmail()` will later be used during login and authentication.
+
+## PasswordResetTokenRepository
+
+`PasswordResetTokenRepository` provides persistence operations for password reset tokens.
+
+Key operations include:
+
+- Find a reset token by its SHA-256 hash.
+- Remove previous reset tokens for a user before creating a new one.
 
 ## Registration Flow
 
@@ -249,6 +275,57 @@ SecurityContext
   ▼
 Protected API
 ```
+
+## Reset Password Flow
+```text
+POST /auth/forgot-password
+            │
+            ▼
+       Find User
+            │
+            ▼
+ Generate Secure Random Token
+            │
+       ┌────┴────┐
+       ▼         ▼
+   Raw Token   SHA-256
+       │         │
+       │         ▼
+       │      MySQL
+       │    token_hash
+       │
+       ▼
+ Notification Service
+       │
+       ▼
+   Reset Link
+       │
+       ▼
+POST /auth/reset-password
+       │
+       ▼
+ SHA-256(raw token)
+       │
+       ▼
+ Find token_hash
+       │
+   ┌───┴──────────────┐
+   │                  │
+ Valid              Invalid
+   │                  │
+   ▼                  ▼
+Check expiry/used    400
+   │
+   ▼
+Hash new password
+   │
+   ▼
+Update User
+   │
+   ▼
+Mark token as used
+```
+
 ## Security
 
 ### Roles
@@ -275,6 +352,18 @@ Changing a password updates the stored password hash.
 Existing JWT access tokens remain valid until their normal expiration because the current authentication implementation is stateless and does not maintain server-side token sessions or revocation state.
 
 A future token-revocation mechanism can be introduced if immediate invalidation of existing tokens after a password change is required.
+
+### Security Considerations
+
+- Reset tokens are generated using `SecureRandom`.
+- Tokens contain 256 bits of randomness.
+- Only the SHA-256 hash is stored in MySQL.
+- Tokens expire after a limited period.
+- A reset token can only be used once.
+- Forgot-password does not reveal whether an email exists.
+- Reset-password does not require an authenticated JWT.
+- The new password is stored using BCrypt.
+- Existing JWTs are not automatically revoked by password reset in the current implementation.
 
 ## API Endpoints
 
@@ -312,36 +401,6 @@ Success: 201 Created
   "status": "ACTIVE",
   "createdAt": "2026-08-08T13:28:38.198620500Z",
   "updatedAt": "2026-08-08T13:28:38.198620500Z"
-}
-```
-
-### Login
-
-**Endpoint**
-
-`POST /api/v1/auth/login`
-
-**Description**
-
-Authenticates an existing user and returns a JWT access token.
-
-**Request**
-
-```json
-Authentication: Public
-{
-  "email": "user@example.com",
-  "password": "Password@123"
-}
-```
-
-**Response**
-
-```json
-Success: 200 OK
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
-  "tokenType": "Bearer"
 }
 ```
 
@@ -457,6 +516,97 @@ Plain-text passwords are never stored or returned.
 | 400    | Invalid request/new password  |
 | 401    | Authentication required       |
 | 404    | User not found                |
+
+### Login
+
+**Endpoint**
+
+`POST /api/v1/auth/login`
+
+**Description**
+
+Authenticates an existing user and returns a JWT access token.
+
+**Request**
+
+```json
+Authentication: Public
+{
+  "email": "user@example.com",
+  "password": "Password@123"
+}
+```
+
+**Response**
+
+```json
+Success: 200 OK
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer"
+}
+```
+
+### Forgot Password
+
+**Endpoint**
+
+`POST /api/v1/auth/forgot-password`
+
+**Description**
+
+Initiates a secure password-reset flow for the supplied email address.
+
+**Authentication:** Public
+
+**Request**
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response**
+```json
+Success: 200 OK
+{
+  "message": "If the account exists, a password reset link has been sent."
+}
+```
+
+### Reset Password
+
+## Endpoint
+
+`POST /api/v1/auth/reset-password`
+
+**Description**
+
+Resets the password using a secure, short-lived, one-time reset token.
+
+**Authentication:** Public
+
+**Request**
+```json
+{
+  "token": "<reset-token>",
+  "newPassword": "NewPassword@456"
+}
+```
+
+The reset token is:
+
+* Cryptographically generated using SecureRandom.
+* Stored as a SHA-256 hash.
+* Time-limited.
+* Single-use.
+* Invalidated after successful password reset.
+
+Success: 204 No Content
+
+Invalid, expired, or already-used tokens return 400 Bad Request.
+
 
 ## Local Development
 
