@@ -1,16 +1,13 @@
 package com.ecommerce.user.controller;
 
 import com.ecommerce.user.dto.request.ChangePasswordRequest;
-import com.ecommerce.user.dto.request.ForgotPasswordRequest;
 import com.ecommerce.user.dto.request.RegisterUserRequest;
 import com.ecommerce.user.dto.request.UpdateUserRequest;
-import com.ecommerce.user.dto.response.MessageResponse;
 import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -85,6 +82,4 @@ public class UserController {
 
                 return ResponseEntity.noContent().build();
         }
-
-        
 }
