@@ -14,6 +14,10 @@ The service currently provides:
 - Database persistence using MySQL
 - Database schema management using Flyway
 - Centralized exception handling
+- Elasticsearch-based product search
+- Elasticsearch product indexing and synchronization
+- Manual product reindexing
+- Kafka integration for asynchronous product events
 
 The Product Catalog requirements in the PRD include browsing products by category, product details, and keyword-based search. Elasticsearch is planned for fast full-text product search and typo correction.
 
@@ -40,12 +44,15 @@ The Product Catalog requirements in the PRD include browsing products by categor
 | Global exception handling | ✅ Completed |
 | Product-specific exceptions | ✅ Completed |
 | Lazy-loading handling | ✅ Completed |
-| Pagination | ⏳ Pending |
-| Product filtering | ⏳ Pending |
-| Elasticsearch integration | ⏳ Pending |
-| Keyword/full-text search | ⏳ Pending |
+| Pagination | ✅ Completed |
+| Product filtering | ✅ Completed |
+| Elasticsearch integration | ✅ Completed |
+| Elasticsearch product indexing | ✅ Completed |
+| Keyword/full-text search | ✅ Completed |
+| Product search synchronization | ✅ Completed |
+| Manual product reindexing | ✅ Completed |
 | Typo-tolerant search | ⏳ Pending |
-| Kafka product events | ⏳ Pending |
+| Kafka product events | 🔄 In progress |
 | Automated tests | ⏳ Pending |
 | API documentation | 🔄 In progress |
 
@@ -300,6 +307,84 @@ Save Product
           v
 ProductResponse
 ```
+## Elasticsearch Integration
+
+Elasticsearch is used as the search engine for the Product Catalog.
+
+MySQL remains the source of truth for product data, while Elasticsearch maintains a searchable product index.
+
+### Architecture
+
+```text
+            ┌──────────────┐
+            │    MySQL     │
+            │ Source of    │
+            │    Truth     │
+            └──────┬───────┘
+                   │
+                   │ Product
+                   ▼
+            ┌──────────────┐
+            │   Product    │
+            │   Service    │
+            └──────┬───────┘
+                   │
+                   ▼
+         ┌──────────────────┐
+         │ Elasticsearch    │
+         │ products index   │
+         └──────────────────┘
+```
+## Kafka Integration
+
+Kafka is part of the platform's event-driven architecture.
+
+The HLD identifies Kafka as the central message broker for asynchronous communication between microservices. :contentReference[oaicite:3]{index=3}
+
+For the Product Service, Kafka will be used to publish product lifecycle events.
+
+### Planned Product Events
+
+```text
+PRODUCT_CREATED
+PRODUCT_UPDATED
+PRODUCT_DELETED
+```
+
+### Architecture
+```text
+                    ┌──────────────┐
+                    │    MySQL     │
+                    │ Source of    │
+                    │    Truth     │
+                    └──────▲───────┘
+                           │
+                     Product CRUD
+                           │
+                    ┌──────┴───────┐
+                    │   Product    │
+                    │   Service    │
+                    └──────┬───────┘
+                           │
+                    Product Event
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │    Kafka     │
+                    │product-events│
+                    └──────┬───────┘
+                           │
+                           ▼
+                 ┌──────────────────┐
+                 │ ProductEvent     │
+                 │    Consumer      │
+                 └────────┬─────────┘
+                          │
+                          ▼
+                   ┌──────────────┐
+                   │Elasticsearch │
+                   └──────────────┘
+```
 
 ## Validation and Exception Handling
 
@@ -413,6 +498,16 @@ Success:
 204 No Content
 ```
 
+### Product Search
+
+```http
+GET /api/v1/products/search?q={keyword}
+```
+Success:
+```text
+200 OK
+```
+
 ## Category API Endpoints
 
 The Product Service also exposes Category CRUD APIs:
@@ -523,6 +618,17 @@ The following Product Service scenarios have been manually verified:
 - Product not-found handling
 - Category not-found handling
 - Global exception handling
+- Product browsing by category
+- Elasticsearch connectivity
+- Initial Elasticsearch product indexing
+- Product reindex operation
+- Keyword product search
+- Search by product name
+- Search by description
+- Search by SKU
+- Product creation synchronization to Elasticsearch
+- Product update synchronization to Elasticsearch
+- Product deletion synchronization from Elasticsearch
 
 ## Development Approach
 

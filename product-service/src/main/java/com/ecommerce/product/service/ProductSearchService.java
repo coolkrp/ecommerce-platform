@@ -3,6 +3,7 @@ package com.ecommerce.product.service;
 import com.ecommerce.product.document.ProductDocument;
 import com.ecommerce.product.dto.response.ProductResponse;
 import com.ecommerce.product.entity.Product;
+import com.ecommerce.product.event.ProductEvent;
 import com.ecommerce.product.mapper.ProductDocumentMapper;
 import com.ecommerce.product.repository.ProductRepository;
 import com.ecommerce.product.repository.ProductSearchRepository;
@@ -122,5 +123,22 @@ public class ProductSearchService {
 
     public void deleteProduct(Long productId) {
         productSearchRepository.deleteById(productId);
+    }
+
+    public void indexProduct(ProductEvent event) {
+
+        ProductDocument document = new ProductDocument();
+
+        document.setId(event.getProductId());
+        document.setName(event.getName());
+        document.setDescription(event.getDescription());
+        document.setSku(event.getSku());
+        document.setPrice(event.getPrice());
+        document.setStockQuantity(event.getStockQuantity());
+        document.setCategoryId(event.getCategoryId());
+        document.setImageUrl(event.getImageUrl());
+        document.setActive(event.isActive());
+
+        elasticsearchOperations.save(document);
     }
 }

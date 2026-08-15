@@ -4,9 +4,12 @@ import com.ecommerce.product.dto.request.ProductRequest;
 import com.ecommerce.product.dto.response.ProductResponse;
 import com.ecommerce.product.entity.Category;
 import com.ecommerce.product.entity.Product;
+import com.ecommerce.product.event.ProductEvent;
+import com.ecommerce.product.event.ProductEventType;
 import com.ecommerce.product.exception.CategoryNotFoundException;
 import com.ecommerce.product.exception.ProductAlreadyExistsException;
 import com.ecommerce.product.exception.ProductNotFoundException;
+import com.ecommerce.product.kafka.ProductEventProducer;
 import com.ecommerce.product.repository.CategoryRepository;
 import com.ecommerce.product.repository.ProductRepository;
 import org.springframework.stereotype.Service;
@@ -21,14 +24,17 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductSearchService productSearchService;
+    private final ProductEventProducer productEventProducer;
 
     public ProductService(
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
-        ProductSearchService productSearchService) {
+        ProductSearchService productSearchService,
+        ProductEventProducer productEventProducer) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.productSearchService = productSearchService;
+        this.productEventProducer = productEventProducer;
     }
 
     public ProductResponse create(ProductRequest request) {
@@ -60,10 +66,14 @@ public class ProductService {
 
         Product savedProduct = productRepository.save(product);
 
-        productSearchService.indexProduct(savedProduct.getId());
+        productEventProducer.publish(
+            createProductEvent(
+                savedProduct,
+                ProductEventType.PRODUCT_CREATED
+            )
+        );
 
         return toResponse(savedProduct);
-
     }
 
     public List<ProductResponse> getAll() {
@@ -113,10 +123,15 @@ public class ProductService {
         product.setUpdatedAt(Instant.now());
 
         Product updatedProduct = productRepository.save(product);
-        productSearchService.indexProduct(updatedProduct.getId());
+
+        productEventProducer.publish(
+            createProductEvent(
+                updatedProduct,
+                ProductEventType.PRODUCT_UPDATED
+            )
+        );
 
         return toResponse(updatedProduct);
-
     }
 
     public void delete(Long id) {
@@ -126,7 +141,12 @@ public class ProductService {
 
         productRepository.delete(product);
 
-        productSearchService.deleteProduct(id);
+        productEventProducer.publish(
+            createProductEvent(
+                product,
+                ProductEventType.PRODUCT_DELETED
+            )
+        );
     }
 
     private ProductResponse toResponse(Product product) {
@@ -158,5 +178,27 @@ public class ProductService {
             .stream()
             .map(this::toResponse)
             .toList();
+    }
+
+    private ProductEvent createProductEvent(
+        Product product,
+        ProductEventType eventType) {
+
+        Long categoryId = product.getCategory() != null
+            ? product.getCategory().getId()
+            : null;
+
+        return new ProductEvent(
+            eventType,
+            product.getId(),
+            product.getName(),
+            product.getDescription(),
+            product.getSku(),
+            product.getPrice(),
+            product.getStockQuantity(),
+            categoryId,
+            product.getImageUrl(),
+            product.isActive()
+        );
     }
 }
