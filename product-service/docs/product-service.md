@@ -15,9 +15,10 @@ The service currently provides:
 - Database schema management using Flyway
 - Centralized exception handling
 - Elasticsearch-based product search
-- Elasticsearch product indexing and synchronization
-- Manual product reindexing
-- Kafka integration for asynchronous product events
+- Elasticsearch product indexing
+- Elasticsearch product reindexing
+- Kafka-based product event publishing
+- Kafka-based asynchronous Elasticsearch synchronization
 
 The Product Catalog requirements in the PRD include browsing products by category, product details, and keyword-based search. Elasticsearch is planned for fast full-text product search and typo correction.
 
@@ -44,17 +45,18 @@ The Product Catalog requirements in the PRD include browsing products by categor
 | Global exception handling | ✅ Completed |
 | Product-specific exceptions | ✅ Completed |
 | Lazy-loading handling | ✅ Completed |
-| Pagination | ✅ Completed |
-| Product filtering | ✅ Completed |
-| Elasticsearch integration | ✅ Completed |
-| Elasticsearch product indexing | ✅ Completed |
-| Keyword/full-text search | ✅ Completed |
-| Product search synchronization | ✅ Completed |
-| Manual product reindexing | ✅ Completed |
-| Typo-tolerant search | ⏳ Pending |
-| Kafka product events | 🔄 In progress |
-| Automated tests | ⏳ Pending |
-| API documentation | 🔄 In progress |
+| Elasticsearch integration	|✅ Completed |
+| Elasticsearch product indexing |	✅ Completed |
+| Elasticsearch product search |	✅ Completed |
+| Elasticsearch reindexing |	✅ Completed |
+| Kafka product events |	✅ Completed |
+| Kafka JSON serialization/deserialization |	✅ Completed |
+| Kafka Elasticsearch synchronization |	✅ Completed |
+| Pagination |	⏳ Pending |
+| Product filtering	| ⏳ Pending |
+| Typo-tolerant search |	⏳ Pending |
+| Automated tests |	⏳ Pending |
+| API documentation |	🔄 In progress |
 
 ## Technology Stack
 
@@ -89,7 +91,9 @@ product-service/
 │   │   │           ├── entity/
 │   │   │           ├── repository/
 │   │   │           ├── service/
-│   │   │           └── exception/
+|   |   |           ├── event/
+│   │   │           ├── exception/
+|   |   |           └──kafka/
 │   │   │
 │   │   └── resources/
 │   │       ├── application.yml
@@ -215,7 +219,7 @@ Example:
 
 `ProductRepository` extends Spring Data JPA's `JpaRepository`.
 
-It currently supports:
+It supports:
 
 ```java
 boolean existsBySku(String sku);
@@ -239,7 +243,7 @@ Product
 Category
 ```
 
-The service keeps:
+The service uses:
 
 ```yaml
 spring:
@@ -254,6 +258,8 @@ For product updates, the service method is transactional because the operation r
 This avoids changing the relationship to `EAGER` simply to solve response serialization.
 
 ## Product CRUD Flow
+
+### Create Product
 
 ```text
 Client
@@ -281,10 +287,25 @@ ProductRepository
 MySQL
    |
    v
+ProductEvent 
+   | 
+   v 
+ Kafka 
+   | 
+   v 
+ProductEventConsumer 
+   | 
+   v 
+Elasticsearch
+   |
+   v
 ProductResponse
 ```
+The API response is returned from the Product Service after the product is persisted.
 
-### Update Flow
+Elasticsearch synchronization happens asynchronously through Kafka.
+
+### Update Product
 
 ```text
 PUT /api/v1/products/{id}
@@ -307,83 +328,31 @@ Save Product
           v
 ProductResponse
 ```
-## Elasticsearch Integration
-
-Elasticsearch is used as the search engine for the Product Catalog.
-
-MySQL remains the source of truth for product data, while Elasticsearch maintains a searchable product index.
-
-### Architecture
+### Delete Product
 
 ```text
-            ┌──────────────┐
-            │    MySQL     │
-            │ Source of    │
-            │    Truth     │
-            └──────┬───────┘
-                   │
-                   │ Product
-                   ▼
-            ┌──────────────┐
-            │   Product    │
-            │   Service    │
-            └──────┬───────┘
-                   │
-                   ▼
-         ┌──────────────────┐
-         │ Elasticsearch    │
-         │ products index   │
-         └──────────────────┘
-```
-## Kafka Integration
-
-Kafka is part of the platform's event-driven architecture.
-
-The HLD identifies Kafka as the central message broker for asynchronous communication between microservices. :contentReference[oaicite:3]{index=3}
-
-For the Product Service, Kafka will be used to publish product lifecycle events.
-
-### Planned Product Events
-
-```text
-PRODUCT_CREATED
-PRODUCT_UPDATED
-PRODUCT_DELETED
-```
-
-### Architecture
-```text
-                    ┌──────────────┐
-                    │    MySQL     │
-                    │ Source of    │
-                    │    Truth     │
-                    └──────▲───────┘
-                           │
-                     Product CRUD
-                           │
-                    ┌──────┴───────┐
-                    │   Product    │
-                    │   Service    │
-                    └──────┬───────┘
-                           │
-                    Product Event
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │    Kafka     │
-                    │product-events│
-                    └──────┬───────┘
-                           │
-                           ▼
-                 ┌──────────────────┐
-                 │ ProductEvent     │
-                 │    Consumer      │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                   ┌──────────────┐
-                   │Elasticsearch │
-                   └──────────────┘
+DELETE /api/v1/products/{id} 
+            | 
+            v 
+      Find Product 
+            | 
+            v 
+      Delete Product 
+            | 
+            v 
+          MySQL 
+            | 
+            v 
+      PRODUCT_DELETED 
+            | 
+            v 
+          Kafka 
+            | 
+            v
+    roductEventConsumer 
+            | 
+            v 
+Delete Elasticsearch document
 ```
 
 ## Validation and Exception Handling
@@ -422,6 +391,18 @@ Expected responses include:
 | Successful delete | 204 |
 
 ## API Endpoints
+
+### Product APIs
+
+| Method |	Endpoint	|Description |
+|---|---|---|
+| POST    |	/api/v1/products  |	Create product  |
+| GET	| /api/v1/products  |	Get all products  |
+| GET |	/api/v1/products/{id} |	Get product by ID |
+| PUT |	/api/v1/products/{id} |	Update product  |
+| DELETE  |	/api/v1/products/{id} |	Delete product |
+| GET |	/api/v1/products/search?q={query} |	Search products |
+| POST  |	/api/v1/products/reindex  |	Reindex products in Elasticsearch |
 
 ### Create Product
 
@@ -522,39 +503,430 @@ DELETE /api/v1/categories/{id}
 
 All Category CRUD operations have been implemented and tested.
 
+
+## Elasticsearch Integration
+
+Elasticsearch is used as the search engine for the Product Catalog.
+
+MySQL remains the primary source of truth for Product data.
+
+The Product Service maintains an Elasticsearch representation of the Product through ProductDocument.
+
+### Architecture
+
+```text
+            ┌──────────────┐
+            │    MySQL     │
+            │ Source of    │
+            │    Truth     │
+            └──────┬───────┘
+                   │
+              Product CRUD
+                   |
+                   ▼
+            ┌──────────────┐
+            │   Product    │
+            │   Service    │
+            └──────┬───────┘
+                   │
+            Product Event
+                   |
+                   ▼
+            ┌──────────────┐
+            │     Kafka    |
+            |product-events│
+            └──────┬───────┘
+                   │
+                   ▼
+            ┌──────────────┐
+            │ ProductEvent |
+            |  consumer    │
+            └──────┬───────┘
+                   │
+                   ▼
+         ┌──────────────────┐
+         │  Elasticsearch   │
+         └──────────────────┘
+```
+## ProductDocument
+
+ProductDocument represents the Elasticsearch representation of a product.
+
+The document contains product fields required for search and product retrieval, including:
+
+- Product ID
+- Name
+- Description
+- SKU
+- Price
+- Stock quantity
+- Category information
+- Image URL
+- Active status
+
+The Elasticsearch document is separate from the JPA Product entity.
+
+This keeps database persistence concerns separate from search-index concerns.
+
+## ProductSearchRepository
+
+ProductSearchRepository is responsible for Elasticsearch document persistence and retrieval.
+
+It is separate from ProductRepository.
+
+```text
+ProductRepository
+        |
+        v
+      MySQL
+
+ProductSearchRepository
+        |
+        v
+ Elasticsearch
+```
+
+The separation prevents Elasticsearch queries from being interpreted as Spring Data JPA property-derived queries.
+
+## ProductSearchService
+
+ProductSearchService provides Elasticsearch-related operations including:
+
+- Index product
+- Search products
+- Delete product document
+- Reindex products
+
+The service can index a product from a ProductEvent without reading the Product entity again from MySQL.
+
+This is important for the Kafka-based event-driven architecture because the Kafka event contains the product snapshot required to construct the search document.
+
+## Product Search
+
+Products can be searched using:
+
+GET /api/v1/products/search?q=iphone
+
+The search request is handled by the Product search layer and queries Elasticsearch.
+
+Example:
+
+```text
+Client
+   |
+   | GET /api/v1/products/search?q=iphone
+   v
+ProductController
+   |
+   v
+ProductSearchService
+   |
+   v
+ProductSearchRepository
+   |
+   v
+Elasticsearch
+```
+
+## Elasticsearch Reindexing
+
+A reindex operation is provided to rebuild the Elasticsearch product index from MySQL data.
+
+The reindex flow is:
+```text
+MySQL Products
+      |
+      v
+ProductService
+      |
+      v
+ProductSearchService
+      |
+      v
+Elasticsearch
+```
+
+Reindexing is useful when the Elasticsearch index is lost, corrupted, or needs to be rebuilt.
+
+## Kafka Integration
+
+Kafka is used for asynchronous Product events.
+
+The Product Service publishes events whenever Product data changes.
+
+### Kafka Topic
+product-events
+
+The topic is used for:
+
+- Product creation events
+- Product update events
+- Product deletion events
+
+## ProductEvent
+
+ProductEvent represents a Product domain event published to Kafka.
+
+The event contains the product snapshot required by the downstream consumer.
+
+Example structure:
+```json
+{
+  "eventType": "PRODUCT_CREATED",
+  "productId": 4,
+  "name": "Search Test IPad",
+  "description": "Product created to test kafka event",
+  "sku": "SEARCH-TEST-001",
+  "price": 10999.99,
+  "stockQuantity": 10,
+  "categoryId": 2,
+  "imageUrl": "https://example.com/test-ipad.jpg",
+  "active": true
+}
+```
+
+## ProductEventType
+
+Supported event types:
+
+**PRODUCT_CREATED**
+**PRODUCT_UPDATED**
+**PRODUCT_DELETED**
+
+The event type determines how the consumer updates Elasticsearch.
+
+## ProductEventProducer
+
+ProductEventProducer is responsible for publishing Product events to Kafka.
+
+The producer publishes to:
+
+product-events
+
+The Product ID is used as the Kafka message key.
+
+Conceptually:
+```text
+ProductService
+      |
+      v
+ProductEventProducer
+      |
+      v
+KafkaTemplate
+      |
+      v
+product-events
+```
+
+## ProductEventConsumer
+
+ProductEventConsumer listens to:
+
+product-events
+
+using the consumer group:
+
+product-search-consumer
+
+The consumer processes events according to their type.
+```text
+PRODUCT_CREATED
+        |
+        v
+Index Product in Elasticsearch
+
+PRODUCT_UPDATED
+        |
+        v
+Update Product in Elasticsearch
+
+PRODUCT_DELETED
+        |
+        v
+Delete Product from Elasticsearch
+```
+
+## Kafka Event Processing
+
+**PRODUCT_CREATED**
+```text
+Product created
+      |
+      v
+MySQL
+      |
+      v
+PRODUCT_CREATED
+      |
+      v
+Kafka
+      |
+      v
+ProductEventConsumer
+      |
+      v
+Elasticsearch index
+```
+
+**PRODUCT_UPDATED**
+```text
+Product updated
+      |
+      v
+MySQL
+      |
+      v
+PRODUCT_UPDATED
+      |
+      v
+Kafka
+      |
+      v
+ProductEventConsumer
+      |
+      v
+Elasticsearch update
+```
+**PRODUCT_DELETED**
+```text
+Product deleted
+      |
+      v
+MySQL
+      |
+      v
+PRODUCT_DELETED
+      |
+      v
+Kafka
+      |
+      v
+ProductEventConsumer
+      |
+      v
+Elasticsearch document deletion
+```
+
+## Kafka Serialization and Deserialization
+
+The producer uses Spring Kafka's JSON serializer.
+
+```yaml
+spring:
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+```
+
+The consumer uses the corresponding JSON deserializer.
+
+```yaml
+spring:
+  kafka:
+    consumer:
+      group-id: product-search-consumer
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.ecommerce.product.event
+        spring.json.value.default.type: com.ecommerce.product.event.ProductEvent
+```
+
+The consumer configuration is required so the JSON Kafka payload can be converted into a ProductEvent object.
+
+## Eventual Consistency
+
+The Product Service uses an eventually consistent search architecture.
+
+MySQL is the primary source of truth.
+
+Elasticsearch is an asynchronously updated search/read model.
+
+For a Product update:
+```text
+Client
+  |
+  v
+Product Service
+  |
+  v
+MySQL
+  |
+  v
+Kafka
+  |
+  v
+ProductEventConsumer
+  |
+  v
+Elasticsearch
+```
+
+Therefore, there can be a small delay between the successful Product API response and the corresponding Elasticsearch search result.
+
+This is expected behavior for asynchronous event processing.
+
 ## Application Configuration
 
 Current Product Service configuration:
 
 ```yaml
-spring:
-  application:
+spring: 
+  application: 
     name: product-service
-
-  datasource:
-    url: jdbc:mysql://localhost:3306/ecommerce
-    username: root
-    password: root
-
-  jpa:
-    hibernate:
+  
+  datasource: 
+    url: jdbc:mysql://localhost:3306/ecommerce 
+    username: root 
+    password: root 
+  
+  jpa: 
+    hibernate: 
       ddl-auto: validate
-    open-in-view: false
-
-  elasticsearch:
-    uris: http://localhost:9200
-
-  kafka:
-    bootstrap-servers: localhost:9092
-
-  flyway:
-    enabled: true
-
-server:
-  port: 8083
+    open-in-view: false 
+    
+  elasticsearch: 
+    uris: http://localhost:9200 
+    
+  kafka: 
+    bootstrap-servers: localhost:9092 
+    producer: 
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer 
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer 
+    
+    consumer: 
+      group-id: product-search-consumer 
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer 
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer 
+      properties: 
+        spring.json.trusted.packages: com.ecommerce.product.event 
+        spring.json.value.default.type: com.ecommerce.product.event.ProductEvent 
+    flyway: enabled: true
+    
+server: port: 8083
 ```
+## Infrastructure Dependencies
 
-Elasticsearch and Kafka are configured as infrastructure dependencies but their Product Service functionality is not yet implemented.
+Product Service requires the following infrastructure:
+
+MySQL
+Elasticsearch
+Kafka
+
+The expected local endpoints are:
+
+MySQL
+localhost:3306
+
+Elasticsearch
+http://localhost:9200
+
+Kafka
+localhost:9092
+
+The services are defined in the project's Docker Compose configuration.
 
 ## Local Development
 
@@ -575,6 +947,8 @@ Product Service runs on:
 ```text
 http://localhost:8083
 ```
+
+Before testing Elasticsearch or Kafka functionality, ensure the corresponding infrastructure containers are running.
 
 ## Database Migration
 
@@ -604,31 +978,136 @@ so schema changes should be made through Flyway migrations.
 
 The following Product Service scenarios have been manually verified:
 
+**Category**
 - Category POST
 - Category GET
 - Category CRUD
+- Invalid category handling
+- Category not-found handling
+
+**Product CRUD**
 - Product POST
 - Product GET all
 - Product GET by ID
 - Product PUT
 - Product DELETE
 - Validation failures
-- Invalid category handling
 - Duplicate SKU handling
 - Product not-found handling
-- Category not-found handling
 - Global exception handling
-- Product browsing by category
-- Elasticsearch connectivity
-- Initial Elasticsearch product indexing
-- Product reindex operation
-- Keyword product search
-- Search by product name
-- Search by description
-- Search by SKU
-- Product creation synchronization to Elasticsearch
-- Product update synchronization to Elasticsearch
-- Product deletion synchronization from Elasticsearch
+
+**Elasticsearch**
+- Product indexing
+- Product search
+- Product reindexing
+- Elasticsearch document update
+- Elasticsearch document deletion
+
+**Kafka**
+- Kafka broker connectivity
+- product-events topic creation
+- PRODUCT_CREATED event publishing
+- PRODUCT_UPDATED event publishing
+- PRODUCT_DELETED event publishing
+- Kafka JSON serialization
+- Kafka JSON deserialization
+- ProductEventConsumer
+- Kafka-based Elasticsearch indexing
+- Kafka-based Elasticsearch updating
+- Kafka-based Elasticsearch deletion
+
+The final event-driven flow was also tested with the direct Elasticsearch calls removed from Product CRUD operations.
+
+## Kafka Integration Verification
+
+The following event sequence was verified:
+```
+PRODUCT_CREATED
+PRODUCT_UPDATED
+PRODUCT_DELETED
+```
+Example:
+```json
+{
+  "eventType": "PRODUCT_CREATED",
+  "productId": 4,
+  "name": "Search Test IPad",
+  "description": "Product created to test kafka event",
+  "sku": "SEARCH-TEST-001",
+  "price": 10999.99,
+  "stockQuantity": 10,
+  "categoryId": 2,
+  "imageUrl": "https://example.com/test-ipad.jpg",
+  "active": true
+}
+```
+
+The corresponding Kafka consumer successfully processed all three event types.
+
+## Final Product Service Architecture
+
+```text
+                         ┌──────────────────┐
+                         │      Client      │
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                       ┌────────────────────┐
+                       │ Product Controller │
+                       └─────────┬──────────┘
+                                 │
+                                 ▼
+                       ┌────────────────────┐
+                       │  Product Service   │
+                       └─────────┬──────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │                         │
+                    ▼                         ▼
+             ┌──────────────┐         ┌──────────────┐
+             │    MySQL     │         │Product Event │
+             │ Source of    │         │   Producer   │
+             │    Truth     │         └──────┬───────┘
+             └──────────────┘                │
+                                             ▼
+                                      ┌──────────────┐
+                                      │    Kafka     │
+                                      │product-events│
+                                      └──────┬───────┘
+                                             │
+                                             ▼
+                                      ┌──────────────┐
+                                      │Product Event │
+                                      │   Consumer   │
+                                      └──────┬───────┘
+                                             │
+                                             ▼
+                                      ┌──────────────┐
+                                      │Elasticsearch │
+                                      │ Search Model │
+                                      └──────────────┘
+```
+
+## Data Ownership
+
+The Product Service follows these data ownership rules:
+```text
+MySQL
+  ↓
+Primary Product data
+
+Kafka
+  ↓
+Product change events
+
+Elasticsearch
+  ↓
+Search/read model
+```
+
+MySQL remains authoritative for Product state.
+
+Elasticsearch should not be treated as the primary transactional data store.
 
 ## Development Approach
 
@@ -637,16 +1116,18 @@ The Product Service is being implemented incrementally.
 Each feature follows:
 
 ```text
-Implementation
+Implementation 
+      ↓ 
+Compilation 
       ↓
-Compilation
-      ↓
-Local testing
-      ↓
-Documentation update
-      ↓
-Git checkpoint
-      ↓
+Local testing 
+      ↓ 
+Integration verification 
+      ↓ 
+Documentation update 
+      ↓ 
+Git checkpoint 
+      ↓ 
 Next feature
 ```
 
@@ -656,21 +1137,24 @@ This keeps the implementation and documentation synchronized.
 
 1. Add pagination for product listing.
 2. Add product filtering by category and other catalog attributes.
-3. Implement Elasticsearch product indexing.
-4. Implement keyword-based product search.
-5. Add full-text and typo-tolerant search.
-6. Integrate Kafka product events where required by the architecture.
-7. Add automated tests.
-8. Complete API/OpenAPI documentation.
-9. Validate Product Service through the API Gateway.
+3. Add typo-tolerant product search.
+4. Add automated unit and integration tests.
+5. Complete API/OpenAPI documentation.
+6. Validate Product Service through the API Gateway.
+7. Review Kafka reliability and failure-handling behavior.
+8. Consider retry and dead-letter handling for failed Kafka events.
 
-## PRD Alignment
+## PRD/HLD Alignment
 
 The Product Service implementation aligns with the Product Catalog requirements:
 
 - Browse products by category — Category and Product CRUD foundation completed.
 - Product details — Product entity and APIs completed.
-- Keyword search — pending.
-- Elasticsearch-based fast/full-text search and typo correction — pending.
+- Keyword search — Elasticsearch-based search implemented.
+- Fast search — Elasticsearch integration implemented.
+- Asynchronous product synchronization — Kafka integration implemented.
+- MySQL Product Catalog persistence — implemented.
+- Elasticsearch search/read model — implemented.
+- Kafka event-driven communication — implemented
 
-The PRD/HLD specifies MySQL for the Product Catalog and Elasticsearch for fast product search, including full-text search and typo correction.
+The remaining search enhancement is typo-tolerant search, which has not yet been implemented or validated.
