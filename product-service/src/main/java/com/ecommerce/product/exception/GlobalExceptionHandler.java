@@ -67,4 +67,26 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(status).body(response);
     }
+
+    @ExceptionHandler(ProductNotFoundException.class)
+public ResponseEntity<Map<String, Object>> handleProductNotFound(
+        ProductNotFoundException ex) {
+
+    return buildResponse(
+            HttpStatus.NOT_FOUND,
+            "PRODUCT_NOT_FOUND",
+            ex.getMessage()
+    );
+}
+
+@ExceptionHandler(ProductAlreadyExistsException.class)
+public ResponseEntity<Map<String, Object>> handleProductAlreadyExists(
+        ProductAlreadyExistsException ex) {
+
+    return buildResponse(
+            HttpStatus.CONFLICT,
+            "PRODUCT_ALREADY_EXISTS",
+            ex.getMessage()
+    );
+}
 }
